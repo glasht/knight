@@ -1,5 +1,4 @@
 import std/options
-import std/strutils
 
 type
     Lexer* = object
@@ -12,6 +11,8 @@ type
         TkNumber, TkString, TkVar, TkFn
         
     Token* = object
+        column: int
+        line: int
         case tag*: TokenTag
         of TkNumber:
             num*: int
@@ -24,7 +25,7 @@ type
 
 proc new*(source: string): Lexer =
     ## Given a source string, initiates a Lexer
-    result = Lexer(stream: source, column: 1, line: 1)
+    result = Lexer(stream: source, column: 0, line: 1)
 
 proc peek(lexer: Lexer): Option[char] =
     ## Peeks at the top of the stream, returning its first character if possible.
@@ -63,7 +64,8 @@ proc lexInteger(lexer: var Lexer): Token =
         number = number * 10 + digit
         lexer.bump()
 
-    return Token(tag: TkNumber, num: number)
+    return Token(tag: TkNumber, num: number,
+                 column: lexer.column, line: lexer.line)
 
 proc lexString(lexer: var Lexer, opening: char): Token =
     var contents = ""
@@ -76,7 +78,8 @@ proc lexString(lexer: var Lexer, opening: char): Token =
             lexer.bump()
             break
 
-    return Token(tag: TkString, str: contents)
+    return Token(tag: TkString, str: contents,
+                 column: lexer.column, line: lexer.line)
 
 proc lexVariable(lexer: var Lexer): Token =
     var name = ""
@@ -88,7 +91,7 @@ proc lexVariable(lexer: var Lexer): Token =
         else:
             break
 
-    return Token(tag: TkVar, name: name)
+    return Token(tag: TkVar, name: name, column: lexer.column, line: lexer.line)
 
 proc lexWordFn(lexer: var Lexer, name: char): Token =
     while lexer.peek().isSome():
@@ -98,7 +101,7 @@ proc lexWordFn(lexer: var Lexer, name: char): Token =
         else:
             break
 
-    return Token(tag: TkFn, fnName: name)
+    return Token(tag: TkFn, fnName: name, column: lexer.column, line: lexer.line)
 
 proc lex*(lexer: var Lexer): seq[Token] =
     ## Main workhorse function for actually lexing the code.
@@ -150,5 +153,6 @@ proc lex*(lexer: var Lexer): seq[Token] =
         # Let's treat everything else as a symbol function
         else:
             lexer.bump()
-            let token = Token(tag: TkFn, fnName: ch)
+            let token = Token(tag: TkFn, fnName: ch,
+                              column: lexer.column, line: lexer.line)
             result.add(token)
