@@ -1,8 +1,8 @@
 import lexer
 
-let code = "; = hello \"Hello\" ; = world \"World\" OUTPUT + hello world"
+let code = "; = hello \"Hello\"\n; = world 'World'\n; OUTPUT + hello world\n; OUT + hello 2"
 
-var scanner = lexer.new("; = hello \"Hello\" ; = world \"World\" OUTPUT + hello world")
+var scanner = lexer.new(code)
 let tokens = scanner.lex()
 
 echo code
