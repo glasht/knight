@@ -1,158 +1,109 @@
-import std/options
+import error
 
 type
     Lexer* = object
         ## Convenience type to encapsulate the lexer functionality
         stream: string
-        column: int
-        line: int
+        file: string
+        position: int
+    
+    TokenTag* = enum TkString
 
-    TokenTag = enum
-        TkNumber, TkString, TkVar, TkFn
-        
     Token* = object
-        column: int
-        line: int
+        ## Token type that contains position and value information
+        start: int
+        final: int
+
         case tag*: TokenTag
-        of TkNumber:
-            num*: int
         of TkString:
             str*: string
-        of TkVar:
-            name*: string
-        of TkFn:
-            fnName*: char
 
-proc new*(source: string): Lexer =
-    ## Given a source string, initiates a Lexer
-    result = Lexer(stream: source, column: 0, line: 1)
+proc fromString*(source: string): Lexer =
+    ## Generates a lexer from a string containing Knight source code
+    let lexer = Lexer(stream: source, file: "stdin", position: 0)
+    return lexer
 
-proc peek(lexer: Lexer): Option[char] =
-    ## Peeks at the top of the stream, returning its first character if possible.
-    
-    if len(lexer.stream) != 0:
-        return some(lexer.stream[0])
-    
-    return none(char)
+proc fromFile*(filename: string): Lexer =
+    ## Generates a lexer from a filename.
+    ## 
+    ## PANIC: Should the process not be able to read the file, it will exit
+    ## the process with error code 1
+    try:
+        let 
+            stream = readFile(filename)
+            lexer = Lexer(stream: stream, file: filename, position: 0)
+        
+        return lexer
+    except IOError:
+        let context = LexerContext(filename: filename, contents: "", position: 0)
+        bail(LexerError.KnIOError, context)
+
+proc peek(lexer: Lexer, ch: var char): bool =
+    ## Checks the first value of the stream, updates ch to have that character
+    ## and returns True.
+    ## 
+    ## Otherwise, it returns false.
+    if lexer.position < lexer.stream.len:
+        ch = lexer.stream[lexer.position]
+        return true
+
+    return false
 
 proc bump(lexer: var Lexer) =
-    ## Bumps the top of the stream without reading from it
-    lexer.stream = lexer.stream[1 .. ^1]
-    lexer.column += 1
+    ## Updates the lexer position.
+    lexer.position += 1
 
-proc munchComment(lexer: var Lexer) =
-    while lexer.peek().isSome():
-        let ch = lexer.peek().get()
-        if ch != '\n':
-            lexer.bump()
-        # We're breaking before the newline, but this isn't a problem
-        # because the main lexer function can deal with it while also
-        # updating the lexer's position.
-        else:
-            return
+proc lexString(lexer: var Lexer): Token =
+    ## Tokenizes a string if possible.
+    ## 
+    ## PANIC: The function will panic in case of unbound strings
+    let openingPosition = lexer.position
 
-proc lexInteger(lexer: var Lexer): Token =
-    var number = 0
+    var opening: char
+    discard lexer.peek(opening)
+    lexer.bump()
+
+    var 
+        str: string
+        ch: char
+        closed = false
     
-    while lexer.peek().isSome():
-        let ch = lexer.peek().get()
-        
-        let digit = int(ch) - int('0')
-        if digit < 0 or digit > 9:
-            break
-
-        number = number * 10 + digit
-        lexer.bump()
-
-    return Token(tag: TkNumber, num: number,
-                 column: lexer.column, line: lexer.line)
-
-proc lexString(lexer: var Lexer, opening: char): Token =
-    var contents = ""
-    while lexer.peek().isSome():
-        let ch = lexer.peek().get()
+    while lexer.peek(ch) and not closed:
         if ch != opening:
-            contents.add(ch)
-            lexer.bump()
+            str.add(ch)
         else:
-            lexer.bump()
-            break
-
-    return Token(tag: TkString, str: contents,
-                 column: lexer.column, line: lexer.line)
-
-proc lexVariable(lexer: var Lexer): Token =
-    var name = ""
-    while lexer.peek().isSome():
-        let ch = lexer.peek().get()
-        if ch in 'a'..'z' or ch == '_':
-            name.add(ch)
-            lexer.bump()
-        else:
-            break
-
-    return Token(tag: TkVar, name: name, column: lexer.column, line: lexer.line)
-
-proc lexWordFn(lexer: var Lexer, name: char): Token =
-    while lexer.peek().isSome():
-        let ch = lexer.peek().get()
-        if ch in 'A'..'Z' or ch == '_':
-            lexer.bump()
-        else:
-            break
-
-    return Token(tag: TkFn, fnName: name, column: lexer.column, line: lexer.line)
+            closed = true
+        
+        lexer.bump()
+    
+    if not closed:
+        let context = LexerContext(
+            filename: lexer.file, contents: lexer.stream, position: openingPosition)
+        bail(LexerError.KnOpenString, context)
+    
+    return Token(
+        start: openingPosition,
+        final: lexer.position - openingPosition,
+        tag: TkString,
+        str: str)
 
 proc lex*(lexer: var Lexer): seq[Token] =
-    ## Main workhorse function for actually lexing the code.
+    ## The main lexing workhorse.
+    ## Returns a sequence of tokens.
+    ## 
+    ## PANIC: The function will panic in case of unbound strings in the
+    ## Knight source code.
+    var tokens: seq[Token]
     
-    while lexer.peek().isSome():
-        let ch = lexer.peek().get()
-
+    var ch: char
+    while lexer.peek(ch):
         case ch
-
-        # Spec mandated whitespace
-        of '\t', '\r', ' ', '(', ')',
-           '[', ']', '{', '}':
-           lexer.bump()
-
-        # Comment symbol
-        of '#':
-            lexer.munchComment()
-
-        # We're dealing with a newline separatedly because
-        # we need to update the lexer about the line position.
-        of '\n':
-            lexer.bump()
-            
-            lexer.column = 0
-            lexer.line += 1
-
-        # Integers
-        of '0'..'9':
-            let token = lexer.lexInteger()
-            result.add(token)
-
-        # Strings
         of '\'', '"':
-            lexer.bump()
-            let token = lexer.lexString(ch)
-            result.add(token)
-
-        # Variables
-        of 'a'..'z', '_':
-            let token = lexer.lexVariable()
-            result.add(token)
-
-        # Word Functions
-        of 'A'..'Z':
-            lexer.bump()
-            let token = lexer.lexWordFn(ch)
-            result.add(token)
+            let token = lexer.lexString()
+            tokens.add(token)
         
-        # Let's treat everything else as a symbol function
+        # For now, let's just ignore everything else
         else:
             lexer.bump()
-            let token = Token(tag: TkFn, fnName: ch,
-                              column: lexer.column, line: lexer.line)
-            result.add(token)
+    
+    return tokens
