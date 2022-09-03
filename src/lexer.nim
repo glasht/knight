@@ -7,7 +7,8 @@ type
         file: string
         position: int
     
-    TokenTag* = enum TkString
+    TokenTag* = enum
+        TkString, TkInt, TkVar, TkFn
 
     Token* = object
         ## Token type that contains position and value information
@@ -17,6 +18,10 @@ type
         case tag*: TokenTag
         of TkString:
             str*: string
+        of TkInt:
+            num*: int
+        of TkVar, TkFn:
+            ident*: string
 
 proc fromString*(source: string): Lexer =
     ## Generates a lexer from a string containing Knight source code
@@ -54,10 +59,10 @@ proc bump(lexer: var Lexer) =
     lexer.position += 1
 
 proc lexString(lexer: var Lexer): Token =
-    ## Tokenizes a string if possible.
+    ## Tokenizes a string.
     ## 
     ## PANIC: The function will panic in case of unbound strings
-    let openingPosition = lexer.position
+    let start = lexer.position
 
     var opening: char
     discard lexer.peek(opening)
@@ -78,14 +83,70 @@ proc lexString(lexer: var Lexer): Token =
     
     if not closed:
         let context = LexerContext(
-            filename: lexer.file, contents: lexer.stream, position: openingPosition)
+            filename: lexer.file, contents: lexer.stream, position: start)
         bail(LexerError.KnOpenString, context)
     
-    return Token(
-        start: openingPosition,
-        final: lexer.position - openingPosition,
-        tag: TkString,
-        str: str)
+    return Token(start: start, final: lexer.position, tag: TkString, str: str)
+
+proc lexInteger(lexer: var Lexer): Token =
+    ## Tokenizes an int.
+    let start = lexer.position
+
+    var 
+        number = 0
+        ch: char
+    
+    while lexer.peek(ch) and ch in '0'..'9':
+        let digit = int(ch) - int('0')
+        number = number * 10 + digit
+        lexer.bump()
+    
+    return Token(start: start, final: lexer.position, tag: TkInt, num: number)
+
+proc munchComment(lexer: var Lexer) =
+    ## Gets rid of a comment.
+    var ch: char
+    while lexer.peek(ch) and ch != '\n':
+        lexer.bump()
+
+proc lexVariable(lexer: var Lexer): Token =
+    ## Lexes a variable name.
+    let start = lexer.position
+
+    var
+        ident = ""
+        ch: char
+    
+    while lexer.peek(ch) and (ch in 'a'..'z' or ch == '_'):
+        ident.add(ch)
+        lexer.bump()
+    
+    return Token(start: start, final: lexer.position, tag: TkVar, ident: ident)
+
+proc lexWordFunction(lexer: var Lexer): Token =
+    ## Lexes a word function name, but not an extension function.
+    let start = lexer.position
+
+    var
+        ident = ""
+        ch: char
+    
+    while lexer.peek(ch) and (ch in 'A'..'Z' or ch == '_'):
+        ident.add(ch)
+        lexer.bump()
+    
+    return Token(start: start, final: lexer.position, tag: TkFn, ident: ident)
+
+proc lexSymbolicFunction(lexer: var Lexer): Token =
+    let start = lexer.position
+    
+    var ch: char
+    discard lexer.peek(ch)
+    lexer.bump()
+
+    let final = lexer.position
+
+    return Token(start: start, final: final, tag: TkFn, ident: $ch)
 
 proc lex*(lexer: var Lexer): seq[Token] =
     ## The main lexing workhorse.
@@ -98,12 +159,37 @@ proc lex*(lexer: var Lexer): seq[Token] =
     var ch: char
     while lexer.peek(ch):
         case ch
+        # Spec mandated whitespace
+        of '\t', '\n', '\r', ' ', '(', ')':
+            lexer.bump()
+        
+        # Comments
+        of '#':
+            lexer.munchComment()
+        
+        # Strings
         of '\'', '"':
             let token = lexer.lexString()
             tokens.add(token)
         
-        # For now, let's just ignore everything else
+        # Integers
+        of '0'..'9':
+            let token = lexer.lexInteger()
+            tokens.add(token)
+        
+        # Variables
+        of 'a'..'z', '_':
+            let token = lexer.lexVariable()
+            tokens.add(token)
+        
+        # Word Function
+        of 'A'..'Z':
+            let token = lexer.lexWordFunction()
+            tokens.add(token)
+
+        # For now, let's treat everything else as symbollic function
         else:
-            lexer.bump()
+            let token = lexer.lexSymbolicFunction()
+            tokens.add(token)
     
     return tokens

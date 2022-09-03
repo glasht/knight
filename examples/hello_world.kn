@@ -1,1 +1,4 @@
-OUT + "Hello, " 'World'
+# This is a test
+; = hello "Hello, "
+; = world 'World!'
+  OUT + hello world
