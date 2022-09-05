@@ -1,0 +1,4 @@
+# Simple guessing game
+; = secret RANDOM
+; = guess + 0 PROMPT
+  OUTPUT IF (? secret guess) "correct!" "wrong!"
