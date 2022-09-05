@@ -3,6 +3,8 @@ import std/strutils
 from system import quit
 
 type
+    InterfaceError* = enum ArgsError
+    
     LexerError* = enum
         KnIOError, KnOpenString
     
@@ -74,6 +76,17 @@ proc getSnippet(line: string, column: int): string =
     
     return snippet
 
+proc bail*(_: InterfaceError) =
+    # We're using the argument as a way to just select the right function
+    echo ( "Usage: knight options\n" &
+            "Options:\n" &
+            "  -e             Runs the second parameter as a program.\n" &
+            "  -f             Interprets the second parameter as a filename,\n"&
+            "                 and runs the program contained therein.\n" &
+            "  -h, --help     Prints this message\n" &
+            "  -v, --version  Prints the version.\n" )
+    quit(1)
+
 proc bail*(error: LexerError, context: LexerContext) =
     case error
     of KnIOError:
@@ -92,4 +105,4 @@ proc bail*(error: LexerError, context: LexerContext) =
                fmt"{context.filename}:{line}:{column}:" & '\n' &
                snippet & '\n' &
                "There's an open string in the file. Please close it.")
-        quit(2)
+        quit(1)
