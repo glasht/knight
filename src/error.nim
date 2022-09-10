@@ -3,6 +3,8 @@ import std/strutils
 from system import quit
 
 type
+    ParseError* = enum ArityError
+
     InterfaceError* = enum ArgsError
     
     LexerError* = enum
@@ -12,6 +14,11 @@ type
         filename*: string
         contents*: string
         position*: int
+    
+    ParserContext* = object
+        positionContext*: LexerContext
+        expectedArity*: int
+        receivedArity*: int
 
 proc getInfo(context: LexerContext): (int, int, string) =
     ## Given a context, retrives the line number, column number
@@ -106,3 +113,15 @@ proc bail*(error: LexerError, context: LexerContext) =
                snippet & '\n' &
                "There's an open string in the file. Please close it.")
         quit(1)
+
+proc bail*(_: ParseError, context: ParserContext) =
+    let
+        (line, column, content) = getInfo(context.positionContext)
+        snippet = getSnippet(content, column)
+    
+    echo ( fmt"[E002] Arity Error:" & '\n' &
+           fmt"{context.positionContext.filename}:{line}:{column}:" & '\n' & 
+           fmt"Expected {context.expectedArity} arguments," &
+           fmt"but received {context.receivedArity}." & '\n' &
+           snippet)
+    quit(1)

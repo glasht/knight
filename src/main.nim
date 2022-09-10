@@ -1,4 +1,5 @@
 import lexer
+import parser
 import error
 from std/os import commandLineParams
 from system import quit
@@ -18,7 +19,7 @@ if args.len == 2:
 
 elif args.len == 1:
     if args[0] in ["-v", "--version"]:
-        echo "NimKnight 0.0.1"
+        echo "NimKnight 0.0.1 - Knight 2.0"
         quit(0)
     
     # Either they asked for help message or they did an oopsie. 
@@ -29,6 +30,5 @@ elif args.len == 1:
 else:
     bail(InterfaceError.ArgsError)
  
-let tokens = scanner.lex()
-for token in tokens:
-    echo token
+let tree = parser.parse(scanner)
+echo tree

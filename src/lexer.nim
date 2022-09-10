@@ -3,8 +3,8 @@ import error
 type
     Lexer* = object
         ## Convenience type to encapsulate the lexer functionality
-        stream: string
-        file: string
+        stream*: string
+        file*: string
         position: int
     
     TokenTag* = enum
@@ -12,8 +12,8 @@ type
 
     Token* = object
         ## Token type that contains position and value information
-        start: int
-        final: int
+        start*: int
+        final*: int
 
         case tag*: TokenTag
         of TkString:
