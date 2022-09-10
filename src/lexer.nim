@@ -187,7 +187,7 @@ proc lex*(lexer: var Lexer): seq[Token] =
             let token = lexer.lexWordFunction()
             tokens.add(token)
 
-        # For now, let's treat everything else as symbollic function
+        # For now, let's treat everything else as symbolic function
         else:
             let token = lexer.lexSymbolicFunction()
             tokens.add(token)

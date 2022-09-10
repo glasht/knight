@@ -1,7 +1,7 @@
 knight:
-	nim compile --out:knight --run src/main.nim
+	nim compile --out:knight src/main.nim
 
 clean:
 	rm knight
 
-.PHONY: clean
+.PHONY: clean knight
